@@ -1,327 +1,371 @@
-import React, { useState } from "react";
-import * as XLSX from "xlsx";
-import QRCode from "qrcode";
+// FILE: App.jsx
+import React, { useState, useEffect } from "react";
+import { BrowserRouter, Routes, Route, Link, useNavigate, useLocation } from "react-router-dom";
 import { jsPDF } from "jspdf";
-import QrScanner from "qr-scanner";
+import { QrReader } from "react-qr-reader";
+import QRCode from "qrcode.react";
 
+/* -------------------- LocalStorage Utility (Simulated Blockchain) -------------------- */
+const KEY = "edutrust_demo_certificates";
+function readAll() {
+  const raw = localStorage.getItem(KEY);
+  return raw ? JSON.parse(raw) : [];
+}
+function save(cert) {
+  const arr = readAll();
+  arr.push(cert);
+  localStorage.setItem(KEY, JSON.stringify(arr));
+}
+function update(hash, patch) {
+  const arr = readAll().map((c) => (c.hash === hash ? { ...c, ...patch } : c));
+  localStorage.setItem(KEY, JSON.stringify(arr));
+}
+function findByStudent(name) {
+  const arr = readAll();
+  return arr.find((c) => c.student.toLowerCase() === name.toLowerCase());
+}
+
+/* -------------------- App Wrapper -------------------- */
 export default function App() {
-  const [page, setPage] = useState("authority");
-
-  // -------- AUTHORITY STATE --------
-  const [students, setStudents] = useState([]);
-  const [message, setMessage] = useState("");
-
-  // -------- COMPANY STATE --------
-  const [studentName, setStudentName] = useState("");
-  const [verified, setVerified] = useState(null);
-
-  // -------- SCANNER STATE --------
-  const [decodedData, setDecodedData] = useState("");
-
-  // ================= AUTHORITY FUNCTIONS ==================
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0];
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      const data = new Uint8Array(evt.target.result);
-      const workbook = XLSX.read(data, { type: "array" });
-      const sheetName = workbook.SheetNames[0];
-      const sheet = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
-      setStudents(sheet);
-    };
-    reader.readAsArrayBuffer(file);
-  };
-
-  const generateCertificate = async (student) => {
-    const qrData = JSON.stringify({
-      name: student.Name,
-      course: student.Course,
-      id: student.ID,
-      issueDate: new Date().toLocaleDateString(),
-    });
-
-    const qrCodeDataURL = await QRCode.toDataURL(qrData);
-    const pdf = new jsPDF();
-
-    pdf.text("EduTrust Certificate", 70, 20);
-    pdf.text(`Name: ${student.Name}`, 20, 50);
-    pdf.text(`Course: ${student.Course}`, 20, 60);
-    pdf.text(`Issued On: ${new Date().toLocaleDateString()}`, 20, 70);
-    pdf.addImage(qrCodeDataURL, "PNG", 140, 50, 50, 50);
-
-    pdf.save(`${student.Name}_Certificate.pdf`);
-    setMessage(`Certificate generated for ${student.Name}`);
-  };
-
-  // ================= COMPANY FUNCTIONS ==================
-  const verifyCertificate = () => {
-    if (studentName.trim() === "") {
-      alert("Please enter a student name");
-      return;
-    }
-
-    // Mock verification
-    setVerified({
-      name: studentName,
-      course: "Blockchain Fundamentals",
-      issueDate: "2025-10-30",
-      verified: true,
-    });
-  };
-
-  // ================= SCANNER FUNCTIONS ==================
-  const handleFileScan = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    try {
-      const result = await QrScanner.scanImage(file);
-      setDecodedData(result);
-    } catch {
-      setDecodedData("No valid QR code found in the image.");
-    }
-  };
-
-  // ================= PAGE RENDER ==================
   return (
-    <div
-      style={{
-        fontFamily: "Arial, sans-serif",
-        backgroundColor: "#f9fafb",
-        minHeight: "100vh",
-        padding: "20px",
-      }}
-    >
-      <h1
-        style={{
-          textAlign: "center",
-          color: "#1d4ed8",
-          fontWeight: "bold",
-          fontSize: "2rem",
-        }}
-      >
-        EduTrust DApp
-      </h1>
+    <BrowserRouter>
+      <div className="container">
+        <div className="header">
+          <h2>EduTrust — Demo DApp</h2>
+          <nav className="nav">
+            <Link to="/">Home</Link>
+            <Link to="/authority-login">Authority Login</Link>
+            <Link to="/company-login">Company Login</Link>
+            <Link to="/scan">Scanner</Link>
+          </nav>
+        </div>
 
-      {/* Navigation */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "center",
-          gap: "10px",
-          margin: "20px 0",
-        }}
-      >
-        <button
-          onClick={() => setPage("authority")}
-          style={{
-            background: "#2563eb",
-            color: "white",
-            border: "none",
-            borderRadius: "6px",
-            padding: "10px 20px",
-            cursor: "pointer",
-          }}
-        >
-          Authority Login
-        </button>
-        <button
-          onClick={() => setPage("company")}
-          style={{
-            background: "#16a34a",
-            color: "white",
-            border: "none",
-            borderRadius: "6px",
-            padding: "10px 20px",
-            cursor: "pointer",
-          }}
-        >
-          Company Login
-        </button>
-        <button
-          onClick={() => setPage("scanner")}
-          style={{
-            background: "#7e22ce",
-            color: "white",
-            border: "none",
-            borderRadius: "6px",
-            padding: "10px 20px",
-            cursor: "pointer",
-          }}
-        >
-          Scanner Module
-        </button>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/authority-login" element={<AuthorityLogin />} />
+          <Route path="/company-login" element={<CompanyLogin />} />
+          <Route path="/authority" element={<AuthorityDashboard />} />
+          <Route path="/company" element={<CompanyDashboard />} />
+          <Route path="/scan" element={<Scanner />} />
+          <Route path="/verify" element={<PublicVerify />} />
+        </Routes>
+      </div>
+    </BrowserRouter>
+  );
+}
+
+/* -------------------- Home Page -------------------- */
+function Home() {
+  return (
+    <div>
+      <h3>Welcome to EduTrust Demo</h3>
+      <p>
+        This demo shows core flows: Educational Authority login, certificate upload, company verification, and QR scanner module. It uses
+        localStorage to simulate blockchain storage. Replace with Ethereum + IPFS in production.
+      </p>
+    </div>
+  );
+}
+
+/* -------------------- Educational Authority Login -------------------- */
+function AuthorityLogin() {
+  const [addr, setAddr] = useState("");
+  const nav = useNavigate();
+
+  function login(e) {
+    e.preventDefault();
+    if (!addr) return alert("Enter authority address (demo)");
+    localStorage.setItem("edutrust_authority", addr);
+    nav("/authority");
+  }
+
+  return (
+    <div>
+      <h3>Educational Authority Login (Demo)</h3>
+      <form onSubmit={login}>
+        <div className="form-row">
+          <input className="input" placeholder="Authority Address or Email (demo)" value={addr} onChange={(e) => setAddr(e.target.value)} />
+        </div>
+        <button className="button">Login</button>
+      </form>
+    </div>
+  );
+}
+
+/* -------------------- Authority Dashboard -------------------- */
+function AuthorityDashboard() {
+  const [certs, setCerts] = useState([]);
+  const [form, setForm] = useState({ student: "", course: "", year: "2025", grade: "A" });
+
+  useEffect(() => {
+    setCerts(readAll());
+  }, []);
+
+  function handleChange(e) {
+    setForm({ ...form, [e.target.name]: e.target.value });
+  }
+
+  async function issue(e) {
+    e.preventDefault();
+    const hash = "hash_" + Math.random().toString(36).slice(2, 10);
+    const cert = {
+      hash,
+      student: form.student,
+      course: form.course,
+      year: form.year,
+      grade: form.grade,
+      issuer: localStorage.getItem("edutrust_authority") || "demo-authority",
+      issuedAt: new Date().toISOString(),
+      revoked: false,
+    };
+
+    const verifyUrl = `${window.location.origin}/verify?hash=${hash}`;
+    cert.verifyUrl = verifyUrl;
+
+    // Generate PDF with embedded QR
+    const pdf = new jsPDF();
+    pdf.setFontSize(18);
+    pdf.text("Certificate", 20, 30);
+    pdf.setFontSize(12);
+    pdf.text(`Student: ${cert.student}`, 20, 50);
+    pdf.text(`Course: ${cert.course}`, 20, 60);
+    pdf.text(`Grade: ${cert.grade}`, 20, 70);
+    pdf.text(`Issuer: ${cert.issuer}`, 20, 80);
+    pdf.text(`Verify at: ${verifyUrl}`, 20, 100);
+    pdf.save(`${cert.student}_certificate.pdf`);
+
+    save(cert);
+    setCerts((prev) => [...prev, cert]);
+    alert("Certificate issued (demo). Hash: " + hash);
+  }
+
+  function revokeCertificate(h) {
+    update(h, { revoked: true });
+    setCerts(readAll());
+  }
+
+  return (
+    <div>
+      <h3>Authority Dashboard</h3>
+      <div className="card" style={{ marginBottom: 12 }}>
+        <h4>Issue Certificate</h4>
+        <form onSubmit={issue}>
+          <div className="form-row">
+            <input name="student" className="input" placeholder="Student Name" value={form.student} onChange={handleChange} required />
+          </div>
+          <div className="form-row">
+            <input name="course" className="input" placeholder="Course" value={form.course} onChange={handleChange} required />
+          </div>
+          <div className="form-row">
+            <input name="grade" className="input" placeholder="Grade" value={form.grade} onChange={handleChange} required />
+          </div>
+          <div className="form-row">
+            <input name="year" className="input" placeholder="Year" value={form.year} onChange={handleChange} required />
+          </div>
+          <button className="button">Issue Certificate</button>
+        </form>
       </div>
 
-      {/* ---------- AUTHORITY PAGE ---------- */}
-      {page === "authority" && (
-        <div>
-          <h2 style={{ color: "#2563eb", fontSize: "1.5rem", fontWeight: "bold" }}>
-            Educational Authority Dashboard
-          </h2>
+      <div>
+        <h4>Issued Certificates</h4>
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Hash</th>
+              <th>Student</th>
+              <th>Course</th>
+              <th>Issued At</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {certs.map((c) => (
+              <tr key={c.hash}>
+                <td style={{ fontFamily: "monospace" }}>{c.hash}</td>
+                <td>{c.student}</td>
+                <td>{c.course}</td>
+                <td>{new Date(c.issuedAt).toLocaleString()}</td>
+                <td>
+                  {!c.revoked && (
+                    <button className="button" onClick={() => revokeCertificate(c.hash)}>
+                      Revoke
+                    </button>
+                  )}
+                  {c.revoked && <span style={{ color: "red" }}>Revoked</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
-          <input
-            type="file"
-            accept=".xlsx, .xls, .csv"
-            onChange={handleFileUpload}
-            style={{
-              border: "1px solid #ccc",
-              padding: "8px",
-              borderRadius: "4px",
-              marginTop: "10px",
-              marginBottom: "10px",
-            }}
-          />
+/* -------------------- Company Login -------------------- */
+function CompanyLogin() {
+  const [company, setCompany] = useState("");
+  const nav = useNavigate();
 
-          {students.length > 0 && (
-            <table
-              style={{
-                borderCollapse: "collapse",
-                width: "100%",
-                marginTop: "10px",
-              }}
-            >
-              <thead>
-                <tr style={{ background: "#e5e7eb" }}>
-                  <th style={thStyle}>ID</th>
-                  <th style={thStyle}>Name</th>
-                  <th style={thStyle}>Course</th>
-                  <th style={thStyle}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {students.map((s, i) => (
-                  <tr key={i}>
-                    <td style={tdStyle}>{s.ID}</td>
-                    <td style={tdStyle}>{s.Name}</td>
-                    <td style={tdStyle}>{s.Course}</td>
-                    <td style={tdStyle}>
-                      <button
-                        onClick={() => generateCertificate(s)}
-                        style={{
-                          background: "#2563eb",
-                          color: "white",
-                          border: "none",
-                          borderRadius: "4px",
-                          padding: "5px 10px",
-                          cursor: "pointer",
-                        }}
-                      >
-                        Generate PDF
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-          {message && (
-            <p style={{ color: "green", fontWeight: "500", marginTop: "10px" }}>
-              {message}
+  function login(e) {
+    e.preventDefault();
+    if (!company) return alert("Enter company name (demo)");
+    localStorage.setItem("edutrust_company", company);
+    nav("/company");
+  }
+
+  return (
+    <div>
+      <h3>Company Login (Demo)</h3>
+      <form onSubmit={login}>
+        <div className="form-row">
+          <input className="input" placeholder="Company Name" value={company} onChange={(e) => setCompany(e.target.value)} />
+        </div>
+        <button className="button">Login</button>
+      </form>
+    </div>
+  );
+}
+
+/* -------------------- Updated Company Dashboard (Search by Student Name) -------------------- */
+function CompanyDashboard() {
+  const [student, setStudent] = useState("");
+  const [result, setResult] = useState(null);
+
+  function verify(e) {
+    e.preventDefault();
+    const res = findByStudent(student);
+    if (!res) return setResult({ found: false });
+    setResult({ ...res, found: true });
+  }
+
+  return (
+    <div>
+      <h3>Company Dashboard - Verify Certificate</h3>
+      <form onSubmit={verify} style={{ marginBottom: 12 }}>
+        <input className="input" placeholder="Enter Student Name" value={student} onChange={(e) => setStudent(e.target.value)} />
+        <div style={{ marginTop: 8 }}>
+          <button className="button">Search Certificate</button>
+        </div>
+      </form>
+
+      {result && !result.found && <div className="card">No certificate found for this student.</div>}
+
+      {result && result.found && (
+        <div className="card">
+          <h4>Certificate Details</h4>
+          <p>
+            <strong>Student:</strong> {result.student}
+          </p>
+          <p>
+            <strong>Course:</strong> {result.course}
+          </p>
+          <p>
+            <strong>Issuer:</strong> {result.issuer}
+          </p>
+          <p>
+            <strong>Issued At:</strong> {new Date(result.issuedAt).toLocaleString()}
+          </p>
+          <p>
+            <strong>Status:</strong> {result.revoked ? "Revoked" : "Valid"}
+          </p>
+          <div style={{ marginTop: 10 }}>
+            <p>
+              <strong>QR Code:</strong>
             </p>
-          )}
-        </div>
-      )}
-
-      {/* ---------- COMPANY PAGE ---------- */}
-      {page === "company" && (
-        <div>
-          <h2 style={{ color: "#16a34a", fontSize: "1.5rem", fontWeight: "bold" }}>
-            Company Dashboard
-          </h2>
-
-          <input
-            type="text"
-            placeholder="Enter Student Name"
-            value={studentName}
-            onChange={(e) => setStudentName(e.target.value)}
-            style={{
-              border: "1px solid #ccc",
-              borderRadius: "4px",
-              padding: "8px",
-              width: "50%",
-              marginTop: "10px",
-            }}
-          />
-          <button
-            onClick={verifyCertificate}
-            style={{
-              marginLeft: "10px",
-              background: "#16a34a",
-              color: "white",
-              border: "none",
-              borderRadius: "4px",
-              padding: "8px 15px",
-              cursor: "pointer",
-            }}
-          >
-            Verify
-          </button>
-
-          {verified && (
-            <div
-              style={{
-                marginTop: "20px",
-                background: "#f3f4f6",
-                border: "1px solid #ddd",
-                padding: "10px",
-                borderRadius: "6px",
-              }}
-            >
-              <h3 style={{ color: "#16a34a" }}>Certificate Verified ✅</h3>
-              <p>Name: {verified.name}</p>
-              <p>Course: {verified.course}</p>
-              <p>Issued On: {verified.issueDate}</p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ---------- SCANNER PAGE ---------- */}
-      {page === "scanner" && (
-        <div>
-          <h2 style={{ color: "#7e22ce", fontSize: "1.5rem", fontWeight: "bold" }}>
-            QR Scanner Module
-          </h2>
-
-          <input
-            type="file"
-            accept="image/*"
-            onChange={handleFileScan}
-            style={{
-              border: "1px solid #ccc",
-              padding: "8px",
-              borderRadius: "4px",
-              marginTop: "10px",
-            }}
-          />
-
-          {decodedData && (
-            <div
-              style={{
-                marginTop: "20px",
-                background: "#f3f4f6",
-                border: "1px solid #ddd",
-                padding: "10px",
-                borderRadius: "6px",
-              }}
-            >
-              <h3 style={{ color: "#7e22ce" }}>Decoded QR Data:</h3>
-              <pre>{decodedData}</pre>
-            </div>
-          )}
+            <QRCode value={result.verifyUrl} size={120} />
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-// ===== Simple table cell styles =====
-const thStyle = {
-  border: "1px solid #ccc",
-  padding: "6px 10px",
-  textAlign: "left",
-};
-const tdStyle = {
-  border: "1px solid #ccc",
-  padding: "6px 10px",
-};
+/* -------------------- Scanner -------------------- */
+function Scanner() {
+  const [data, setData] = useState("No result");
+  const nav = useNavigate();
+
+  return (
+    <div>
+      <h3>Scanner Module</h3>
+      <div style={{ maxWidth: 480 }}>
+        <QrReader
+          constraints={{ facingMode: "environment" }}
+          onResult={(result) => {
+            if (result) {
+              setData(result.text);
+              try {
+                const u = new URL(result.text);
+                const h = u.searchParams.get("hash");
+                if (h) nav(`/verify?hash=${h}`);
+              } catch (e) {}
+            }
+          }}
+          style={{ width: "100%" }}
+        />
+      </div>
+      <p>Result: {data}</p>
+    </div>
+  );
+}
+
+/* -------------------- Public Verify Page -------------------- */
+function useQuery() {
+  return new URLSearchParams(useLocation().search);
+}
+
+function PublicVerify() {
+  const q = useQuery();
+  const hashParam = q.get("hash");
+  const [result, setResult] = useState(null);
+
+  useEffect(() => {
+    if (hashParam) {
+      const arr = readAll();
+      const r = arr.find((c) => c.hash === hashParam);
+      setResult(r || { notFound: true });
+    }
+  }, [hashParam]);
+
+  if (!hashParam) return <div>Please provide a certificate hash in query like ?hash=...</div>;
+  if (result && result.notFound) return <div className="card">Certificate not found or invalid.</div>;
+  if (!result) return <div>Loading...</div>;
+
+  return (
+    <div className="card">
+      <h4>Certificate Verification</h4>
+      <p>
+        <strong>Student:</strong> {result.student}
+      </p>
+      <p>
+        <strong>Course:</strong> {result.course}
+      </p>
+      <p>
+        <strong>Issuer:</strong> {result.issuer}
+      </p>
+      <p>
+        <strong>Issued At:</strong> {new Date(result.issuedAt).toLocaleString()}
+      </p>
+      <p>
+        <strong>Status:</strong> {result.revoked ? "Revoked" : "Valid"}
+      </p>
+    </div>
+  );
+}
+
+/* -------------------- Inline Styles -------------------- */
+const style = document.createElement("style");
+style.innerHTML = `
+body { font-family: Inter, system-ui, Arial; margin:0; padding:0; background:#f5f7fb; color:#111827 }
+.container { max-width:1000px; margin:32px auto; padding:20px; background:white; border-radius:8px; box-shadow:0 6px 18px rgba(15,23,42,0.08) }
+.header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px }
+.nav a { margin-right:12px; color:#2563eb; text-decoration:none }
+.form-row { margin-bottom:12px }
+.input { padding:8px 10px; border:1px solid #d1d5db; border-radius:6px; width:100% }
+.button { padding:8px 14px; background:#2563eb; color:#fff; border:none; border-radius:6px; cursor:pointer }
+.table { width:100%; border-collapse:collapse }
+.table th, .table td { text-align:left; padding:8px; border-bottom:1px solid #e5e7eb }
+.card { padding:12px; border:1px solid #e6ecf2; border-radius:8px; margin-top:8px }
+`;
+document.head.appendChild(style);
