@@ -1,0 +1,327 @@
+import React, { useState } from "react";
+import * as XLSX from "xlsx";
+import QRCode from "qrcode";
+import { jsPDF } from "jspdf";
+import QrScanner from "qr-scanner";
+
+export default function App() {
+  const [page, setPage] = useState("authority");
+
+  // -------- AUTHORITY STATE --------
+  const [students, setStudents] = useState([]);
+  const [message, setMessage] = useState("");
+
+  // -------- COMPANY STATE --------
+  const [studentName, setStudentName] = useState("");
+  const [verified, setVerified] = useState(null);
+
+  // -------- SCANNER STATE --------
+  const [decodedData, setDecodedData] = useState("");
+
+  // ================= AUTHORITY FUNCTIONS ==================
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const data = new Uint8Array(evt.target.result);
+      const workbook = XLSX.read(data, { type: "array" });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+      setStudents(sheet);
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const generateCertificate = async (student) => {
+    const qrData = JSON.stringify({
+      name: student.Name,
+      course: student.Course,
+      id: student.ID,
+      issueDate: new Date().toLocaleDateString(),
+    });
+
+    const qrCodeDataURL = await QRCode.toDataURL(qrData);
+    const pdf = new jsPDF();
+
+    pdf.text("EduTrust Certificate", 70, 20);
+    pdf.text(`Name: ${student.Name}`, 20, 50);
+    pdf.text(`Course: ${student.Course}`, 20, 60);
+    pdf.text(`Issued On: ${new Date().toLocaleDateString()}`, 20, 70);
+    pdf.addImage(qrCodeDataURL, "PNG", 140, 50, 50, 50);
+
+    pdf.save(`${student.Name}_Certificate.pdf`);
+    setMessage(`Certificate generated for ${student.Name}`);
+  };
+
+  // ================= COMPANY FUNCTIONS ==================
+  const verifyCertificate = () => {
+    if (studentName.trim() === "") {
+      alert("Please enter a student name");
+      return;
+    }
+
+    // Mock verification
+    setVerified({
+      name: studentName,
+      course: "Blockchain Fundamentals",
+      issueDate: "2025-10-30",
+      verified: true,
+    });
+  };
+
+  // ================= SCANNER FUNCTIONS ==================
+  const handleFileScan = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const result = await QrScanner.scanImage(file);
+      setDecodedData(result);
+    } catch {
+      setDecodedData("No valid QR code found in the image.");
+    }
+  };
+
+  // ================= PAGE RENDER ==================
+  return (
+    <div
+      style={{
+        fontFamily: "Arial, sans-serif",
+        backgroundColor: "#f9fafb",
+        minHeight: "100vh",
+        padding: "20px",
+      }}
+    >
+      <h1
+        style={{
+          textAlign: "center",
+          color: "#1d4ed8",
+          fontWeight: "bold",
+          fontSize: "2rem",
+        }}
+      >
+        EduTrust DApp
+      </h1>
+
+      {/* Navigation */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          gap: "10px",
+          margin: "20px 0",
+        }}
+      >
+        <button
+          onClick={() => setPage("authority")}
+          style={{
+            background: "#2563eb",
+            color: "white",
+            border: "none",
+            borderRadius: "6px",
+            padding: "10px 20px",
+            cursor: "pointer",
+          }}
+        >
+          Authority Login
+        </button>
+        <button
+          onClick={() => setPage("company")}
+          style={{
+            background: "#16a34a",
+            color: "white",
+            border: "none",
+            borderRadius: "6px",
+            padding: "10px 20px",
+            cursor: "pointer",
+          }}
+        >
+          Company Login
+        </button>
+        <button
+          onClick={() => setPage("scanner")}
+          style={{
+            background: "#7e22ce",
+            color: "white",
+            border: "none",
+            borderRadius: "6px",
+            padding: "10px 20px",
+            cursor: "pointer",
+          }}
+        >
+          Scanner Module
+        </button>
+      </div>
+
+      {/* ---------- AUTHORITY PAGE ---------- */}
+      {page === "authority" && (
+        <div>
+          <h2 style={{ color: "#2563eb", fontSize: "1.5rem", fontWeight: "bold" }}>
+            Educational Authority Dashboard
+          </h2>
+
+          <input
+            type="file"
+            accept=".xlsx, .xls, .csv"
+            onChange={handleFileUpload}
+            style={{
+              border: "1px solid #ccc",
+              padding: "8px",
+              borderRadius: "4px",
+              marginTop: "10px",
+              marginBottom: "10px",
+            }}
+          />
+
+          {students.length > 0 && (
+            <table
+              style={{
+                borderCollapse: "collapse",
+                width: "100%",
+                marginTop: "10px",
+              }}
+            >
+              <thead>
+                <tr style={{ background: "#e5e7eb" }}>
+                  <th style={thStyle}>ID</th>
+                  <th style={thStyle}>Name</th>
+                  <th style={thStyle}>Course</th>
+                  <th style={thStyle}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {students.map((s, i) => (
+                  <tr key={i}>
+                    <td style={tdStyle}>{s.ID}</td>
+                    <td style={tdStyle}>{s.Name}</td>
+                    <td style={tdStyle}>{s.Course}</td>
+                    <td style={tdStyle}>
+                      <button
+                        onClick={() => generateCertificate(s)}
+                        style={{
+                          background: "#2563eb",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "4px",
+                          padding: "5px 10px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Generate PDF
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {message && (
+            <p style={{ color: "green", fontWeight: "500", marginTop: "10px" }}>
+              {message}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* ---------- COMPANY PAGE ---------- */}
+      {page === "company" && (
+        <div>
+          <h2 style={{ color: "#16a34a", fontSize: "1.5rem", fontWeight: "bold" }}>
+            Company Dashboard
+          </h2>
+
+          <input
+            type="text"
+            placeholder="Enter Student Name"
+            value={studentName}
+            onChange={(e) => setStudentName(e.target.value)}
+            style={{
+              border: "1px solid #ccc",
+              borderRadius: "4px",
+              padding: "8px",
+              width: "50%",
+              marginTop: "10px",
+            }}
+          />
+          <button
+            onClick={verifyCertificate}
+            style={{
+              marginLeft: "10px",
+              background: "#16a34a",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              padding: "8px 15px",
+              cursor: "pointer",
+            }}
+          >
+            Verify
+          </button>
+
+          {verified && (
+            <div
+              style={{
+                marginTop: "20px",
+                background: "#f3f4f6",
+                border: "1px solid #ddd",
+                padding: "10px",
+                borderRadius: "6px",
+              }}
+            >
+              <h3 style={{ color: "#16a34a" }}>Certificate Verified ✅</h3>
+              <p>Name: {verified.name}</p>
+              <p>Course: {verified.course}</p>
+              <p>Issued On: {verified.issueDate}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ---------- SCANNER PAGE ---------- */}
+      {page === "scanner" && (
+        <div>
+          <h2 style={{ color: "#7e22ce", fontSize: "1.5rem", fontWeight: "bold" }}>
+            QR Scanner Module
+          </h2>
+
+          <input
+            type="file"
+            accept="image/*"
+            onChange={handleFileScan}
+            style={{
+              border: "1px solid #ccc",
+              padding: "8px",
+              borderRadius: "4px",
+              marginTop: "10px",
+            }}
+          />
+
+          {decodedData && (
+            <div
+              style={{
+                marginTop: "20px",
+                background: "#f3f4f6",
+                border: "1px solid #ddd",
+                padding: "10px",
+                borderRadius: "6px",
+              }}
+            >
+              <h3 style={{ color: "#7e22ce" }}>Decoded QR Data:</h3>
+              <pre>{decodedData}</pre>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ===== Simple table cell styles =====
+const thStyle = {
+  border: "1px solid #ccc",
+  padding: "6px 10px",
+  textAlign: "left",
+};
+const tdStyle = {
+  border: "1px solid #ccc",
+  padding: "6px 10px",
+};
